@@ -103,7 +103,7 @@ a {
     text-decoration: underline;
   }
 
-  .social-media-list &:hover {
+  .social-media-list &:hover, &.nunder {
     text-decoration: none;
 
     .username {
