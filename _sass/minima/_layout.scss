@@ -1,3 +1,16 @@
+.icon--twitter:hover > svg > path {
+    fill: #55acee;
+}
+.icon--github:hover > svg > path {
+    fill: #000000;
+}
+.icon--linkedin:hover > svg > path {
+    fill: #0077b5;
+}
+.icon > svg > path {
+    transition: fill 0.35s;
+}
+
 /**
  * Site header
  */
