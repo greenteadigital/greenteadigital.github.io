@@ -3,3 +3,17 @@
 ---
 
 @import "minima";
+
+.times {
+    border-collapse: collapse;
+    margin: 0 auto;
+> table, td {
+    border: 2px solid grey;
+    text-align: right;
+    padding: 3px 7px;
+    }
+th {
+    border: 2px solid black;
+    padding: 3px 10px;
+}
+}
