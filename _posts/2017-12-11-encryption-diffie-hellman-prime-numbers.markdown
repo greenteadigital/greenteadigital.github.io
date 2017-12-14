@@ -13,18 +13,18 @@ In a normal browsing session, you probably use DH many, many times without knowi
 
  The really cool thing about DH is that it allows for two parties who wish to establish encrypted communications to agree on an encryption key over an insecure channel. This means that even if a passive foe is recording all the traffic exchanged during a DH key agreement "handshake", it will be practically impossible for them to determine the agreed-upon key. Notice I said a "passive foe". If you are facing an active foe with the ability play the role of man-in-the-middle, you will need additional verification to be sure that the party you're communicating with is who you think they are. That can be a topic for a future post :)
  
-Two other things are required to make DH secure: the parameters used during the DH computation must be of adequate size, and they must be prime. This last requirement is where my code comes in. What I've created is a prime number generating daemon for Unix-likes.
+Two other things are required to make DH secure: the parameters used during the DH computation must be of adequate size, and they must be prime. This last requirement is where my code comes in. What I've created is a prime number generating daemon (`primesd`) for Unix-like OSes.
 
 Now lemme just say up-front: when it comes to writing C, I'm still a `n00b`. So, if you're an old hand at C, don't be surprised if something doesn't look quite right ;) That being said, I've taken significant time to test and verify that the code works as intended without memory leaks or data corruption. So, if you find an issue along those lines, send me a tweet at the link in the header!
 
 ### High-level architecture and performance
-Before we dive into the code, a word on the architecture. The daemon's main thread receives incoming UDP traffic on port 31397 (itself a prime number, more on this later). Clients wishing to recieve a generated prime send the bit length of the requested prime to the daemon on said port. Only 4 bit lengths are currently supported: 1024, 2048, 3072, and 4096. The daemon will spawn the number of child threads configured in [primes.h](https://github.com/greenteadigital/C-primes/blob/master/primes/primes.h) to do the heavy lifting. The number of threads should be equal to the number of _physical_ cores available to the process. While the child threads race to be the first to find a random prime of the given length, the main thread goes back to receiving new requests. While the daemon is capable of servicing multiple requests concurrently, performance will undoubtedly suffer due to the CPU-bound nature of the operation.
+Before we dive into the code, a word on the architecture. The daemon's main thread receives incoming UDP traffic on port 31397 (itself a prime number, more on this later). Clients wishing to recieve a generated prime send the bit length of the requested prime to `primesd` on said port. Only 4 bit lengths are currently supported: 1024, 2048, 3072, and 4096. `primesd` will spawn the number of child threads configured in [primes.h](https://github.com/greenteadigital/C-primes/blob/master/primes/primes.h) to do the heavy lifting. The number of threads should be equal to the number of _physical_ cores available to the process. While the child threads race to be the first to find a random prime of the given length, the main thread goes back to receiving new requests. While the daemon is capable of servicing multiple requests concurrently, performance will undoubtedly suffer due to the CPU-bound nature of the operation.
 
 On the subject of performance, I ran the [reference client](https://github.com/greenteadigital/C-primes/blob/master/primes/getprime.c) in a loop of 100 iterations using the following command at a bash prompt (replacing `$BITLEN` with the length being tested):
 ````bash
 time for n in {1..100}; do ./getprime -b $BITLEN; done
 ````
-These are the times my quad-core i7 @2.5GHz put up, by bitlength requested:
+These are the times my quad-core i7 @2.5GHz put up to generate 100 primes, by bitlength requested:
 
 Bit Length | Real (Clock) Time | Average Time
 ---------- | ----------------- | ---------------
@@ -34,9 +34,29 @@ Bit Length | Real (Clock) Time | Average Time
 4096       | 2m12.984s | 1.33s
 {:.times}
 <br/>
-Judging by those times, the sweet spot for security and performance, is 2048-bit primes. Of course, your mileage will vary. 
+Judging by those times, the sweet spot for security and performance is 2048-bit primes. Of course, your mileage will vary.
 
 One final note before we walk the code, while the daemon and client do use sockets, the intention was that all traffic between daemon and client would travel the loopback device. And I would probably agree with those that criticize the choice of UDP. At least in the sense that packets may be dropped. However, since primes are returned to clients as hexadecimal strings, even in the worst case of 4096-bit primes, the response will only be 1024 bytes in length. If you run `sysctl -a | grep udp`, it's unlikely you have `maxdgram` or `recvspace` set to less than 1024. But that is no guarantee a packet will never be dropped, so tread with caution.
 
-### Let's you and me take a little walk
-OK, fine, if you insist. (to be continued)
+### Let's you and me take a little walk(through)
+It's not a long trip. `primesd` requires only 2 source files: a header file with some constants and a `struct` definition, and primesd.c which contains `main`. Let's take a look at the header, its pretty simple:
+````c
+#pragma once
+
+#include <stdbool.h>
+
+#define PRIMES_DAEMON_PORT 31397
+#define LOCALHOST "127.0.0.1"
+#define NTHREADS 4
+#define SEED_SZ_BYTES 16	// 16 * 8 = 128 bits for random seed
+
+struct thread_params {
+	struct sockaddr_in r_addr;
+	volatile bool served_prime;
+	short bitsize;
+	volatile char live_thread_count;
+};
+````
+The only thing here that might benefit from some explanation is the `struct`. A new struct of this type is created for every request, and is shared among child threads. The two non-volatile members hold the socket address of the client, and the requested bitlength, repectively. The volatile members keep track of whether a prime has been found and returned to the client, and how many child threads are still alive. Both are protected by the same mutex, [`served_lock`](https://github.com/greenteadigital/C-primes/blob/565dfd5397d2c774243b779d29f86ec8d9321220/primes/primesd.c#L22). 
+
+(to be continued)
