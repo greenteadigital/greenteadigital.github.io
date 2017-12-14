@@ -57,6 +57,53 @@ struct thread_params {
 	volatile char live_thread_count;
 };
 ````
-The only thing here that might benefit from some explanation is the `struct`. A new struct of this type is created for every request, and is shared among child threads. The two non-volatile members hold the socket address of the client, and the requested bitlength, repectively. The volatile members keep track of whether a prime has been found and returned to the client, and how many child threads are still alive. Both are protected by the same mutex, [`served_lock`](https://github.com/greenteadigital/C-primes/blob/565dfd5397d2c774243b779d29f86ec8d9321220/primes/primesd.c#L22). 
+The only thing here that might benefit from some explanation is the `struct`. A new struct of this type is created for every request, and is shared among child threads. The two non-volatile members hold the socket address of the client, and the requested bitlength, repectively. The volatile members keep track of whether a prime has been found and returned to the client, and how many child threads are still alive. Both are protected by mutexes.
+
+Which brings us to the main file, [primesd.c](https://github.com/greenteadigital/C-primes/blob/master/primes/primesd.c). It consists of the `main` function, the `getPrime` function which child threads run, one function to create threads and another to destroy them, and a final function which gets a random seed. Six variables are declared at the file level: a boolean, a file pointer, an integer, and 3 mutexes. Only the boolean, `DBG`, gets initialized. If you want debug output printed to stdout, set that to true.
+````c
+bool DBG = false;
+
+FILE *urandom;
+int sockfd; // local socket
+
+pthread_mutex_t urandom_lock;
+pthread_mutex_t served_lock;
+pthread_mutex_t tcnt_lock;
+````
+The remaining five will be initialized in `main`:
+````c
+int main(int argc, char *argv[]) {
+	
+	urandom = fopen("/dev/urandom", "r");
+	
+	pthread_mutex_init(&urandom_lock, NULL);
+	pthread_mutex_init(&served_lock, NULL);
+	pthread_mutex_init(&tcnt_lock, NULL);
+	
+	sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+````
+Notice that the previous line created a socket and returned the file descriptor. However, this socket has to be bound to an address to be useful. Helpfully, by inluding `<netinet/in.h>`, we have a struct available to hold the adress: `struct sockaddr_in`. So we declare one, and then zero out its memory.
+````c
+    struct sockaddr_in l_addr;	// daemon socket address
+    memset((void *) &l_addr, 0, sizeof(l_addr));
+````
+Now we're ready to set the address parameters: the address family, the port, and the IP address. Two helper functions make dealing with differences in endian-ness and machine vs. human-readable formats easy: `htons` (host to network short) and `inet_pton` (inet presentation to network). And then finally the address struct is bound, via its file descriptor, to the socket we created earlier.
+````c
+    l_addr.sin_family = AF_INET;
+    l_addr.sin_port = htons(PRIMES_DAEMON_PORT);
+    inet_pton(AF_INET, LOCALHOST, &(l_addr.sin_addr.s_addr));
+
+    bind(sockfd, (struct sockaddr*) &l_addr, sizeof(l_addr));
+````
+So now we have a UDP socket bound to an address. If you're used to using TCP sockets, this is a little different. We don't have to listen for and accept connections, we just `recvfrom()`. But before we can do that, there's a bit more setup to do. We need a buffer to hold the bitlength the client requests, and another zeroed-out `struct sockaddr_in` to hold the client's address info. Like so:
+````c
+	char buffsz = 4;
+	char client_req_bitlen[buffsz];
+	
+	struct sockaddr_in r_addr;	// remote client address
+	socklen_t remotesz = sizeof(r_addr);
+	memset((void *) &r_addr, 0, sizeof(r_addr));
+````
+Before the main thread enters its infinite `recvfrom()` loop, we'll declare two more variables: a `struct thread_params` which...
 
 (to be continued)
