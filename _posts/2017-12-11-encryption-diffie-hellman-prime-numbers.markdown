@@ -82,7 +82,7 @@ int main(int argc, char *argv[]) {
 	
 	sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 ````
-Notice that the previous line created a socket and returned the file descriptor. However, this socket has to be bound to an address to be useful. Helpfully, by inluding `<netinet/in.h>`, we have a struct available to hold the adress: `struct sockaddr_in`. So we declare one, and then zero out its memory.
+Notice that the previous line created a socket and returned the file descriptor. However, this socket has to be bound to an address to be useful. Helpfully, by including `<netinet/in.h>`, we have a struct available to hold the adress: `struct sockaddr_in`. So we declare one, and then zero out its memory.
 ````c
     struct sockaddr_in l_addr;	// daemon socket address
     memset((void *) &l_addr, 0, sizeof(l_addr));
