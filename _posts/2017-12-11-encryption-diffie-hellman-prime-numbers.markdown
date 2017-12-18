@@ -39,7 +39,7 @@ Judging by those times, the sweet spot for security and performance is 2048-bit 
 One final note before we walk the code, while the daemon and client do use sockets, the intention was that all traffic between daemon and client would travel the loopback device. And I would probably agree with those that criticize the choice of UDP. At least in the sense that packets may be dropped. However, since primes are returned to clients as hexadecimal strings, even in the worst case of 4096-bit primes, the response will only be 1024 bytes in length. If you run `sysctl -a | grep udp`, it's unlikely you have `maxdgram` or `recvspace` set to less than 1024. But that is no guarantee a packet will never be dropped, so tread with caution.
 
 ### Let's you and me take a little walk(through)
-It's not a long trip. `primesd` requires only 2 source files: a header file with some constants and a `struct` definition, and primesd.c which contains `main`. Let's take a look at the header, its pretty simple:
+`primesd` requires only 2 source files: a header file with some constants and a `struct` definition, and primesd.c which contains `main`. Let's take a look at the header, its pretty simple:
 ````c
 #pragma once
 
@@ -189,6 +189,29 @@ void getPrime(void *thread_params) {
 	unsigned char single = 1;
 	mpz_import(one, 1, -1, 1, 0, 0, &single);
 ````
-As you see above, we initialize quite a few things to begin with: a buffer to hold a random seed, and several types provided by GMPlib
+As you see above, we initialize quite a few things to begin with: a buffer to hold a random seed, and several types provided by GMPlib. Those include a random state and several integer types. More about those later.
+Next a call is made to `getUrandom`, which reads the system CSPRNG to seed the random state we already established. A mutex assures that each thread's seed is distinct. 
+````c
+	getUrandom(&seed_buff[0], SEED_SZ_BYTES);
+	
+	mpz_import(seed, SEED_SZ_BYTES, -1, 1, 0, 0, &seed_buff[0]);
+	gmp_randseed(state, seed);
+```` 
+Then the code enters what can be considered the core loop: first check to see if another thread has already found and returned a prime number to the client. If yes, function `thread_exit` is called. Otherwise, a random number is generated of the requested length, bitwise OR'd with one to assure that it's odd, and then probabilistically tested for primality.
+````c
+while(1) {
+    
+    pthread_mutex_lock(&served_lock);
+    if (params->served_prime) thread_exit(params, &state, &seed, &randnum, &one);
+    pthread_mutex_unlock(&served_lock);
+    
+    mpz_urandomb(randnum, state, params->bitsize);
+    mpz_ior(randnum, randnum, one);	// make sure randnum is odd by bitwise-ORing with 1
+    if (mpz_probab_prime_p(randnum, 17)) break;
+}
+````
+Yes, in fact, this does mean that the probability that the dameon returns a composite number is non-zero, but it is still quite small at < 0.000000000058207661. If you want greater assurance, use an integer larger than 17 as the second argument to `mpz_probab_prime_p` (or, you know, [RTFM](https://gmplib.org/manual/Number-Theoretic-Functions.html)). 
+
+
 
 (to be continued)
