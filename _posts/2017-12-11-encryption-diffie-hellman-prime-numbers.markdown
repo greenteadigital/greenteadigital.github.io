@@ -100,10 +100,95 @@ So now we have a UDP socket bound to an address. If you're used to using TCP soc
 	char buffsz = 4;
 	char client_req_bitlen[buffsz];
 	
-	struct sockaddr_in r_addr;	// remote client address
+	struct sockaddr_in r_addr;	// "remote" client address
 	socklen_t remotesz = sizeof(r_addr);
 	memset((void *) &r_addr, 0, sizeof(r_addr));
 ````
-Before the main thread enters its infinite `recvfrom()` loop, we'll declare two more variables: a `struct thread_params` which...
+Before the main thread enters its infinite `recvfrom()` loop, we'll declare two more variables: a `struct thread_params` instance to hold the data shared across worker threads, and `char recv_count` to track the number of bytes received from each client request.
+
+Now we enter the main loop of the main thread:
+
+````c
+while(1) {
+    
+    recv_count = 0;
+    while (recv_count < buffsz) {
+        recv_count += recvfrom (
+                sockfd,
+                (void *) (&client_req_bitlen + (recv_count * sizeof(char))),
+                sizeof(client_req_bitlen) - recv_count,
+                0,
+                (struct sockaddr *) &r_addr,
+                &remotesz );
+    }
+````
+...which starts out looping over the input from the requesting client. Although the 4 byte request is likely fully ingested by the end of the first iteration, pointer arithmetic in the 2nd argument will assure the full request is received and stored.
+
+Once we get the full request, we validate it. If it fails, we ignore it and move back to the top of the loop.
+````c
+    if ( ! ( strncmp(&client_req_bitlen[0], "1024", 4) == 0
+        || strncmp(&client_req_bitlen[0], "2048", 4) == 0
+        || strncmp(&client_req_bitlen[0], "3072", 4) == 0
+        || strncmp(&client_req_bitlen[0], "4096", 4) == 0)) {
+        
+        continue;
+    }
+````
+We then initialize the `thread_params` struct which is passed to child threads, and copy it out onto the heap. Otherwise it could be clobbered by the next request, as the instance created in `main()` is reused.
+````c
+    params.bitsize = strtol(&client_req_bitlen[0], 0, 0);
+    params.r_addr = r_addr;
+    params.served_prime = false;
+    params.live_thread_count = 0;
+    		
+    void *pp = malloc(sizeof(params));
+    memcpy(pp, &params, sizeof(params));
+````
+Then we have an optional diagnostic print just before child threads get initialized in `initThreads`.
+````c
+    if (DBG) printf("\nPreparing to send %s-bit prime to port %d\n", &client_req_bitlen[0],
+                    ntohs(((struct thread_params *) pp)->r_addr.sin_port));
+    
+    initThreads(pp);
+}
+````
+
+### You're still here!?
+Awesome :) You deserve some internet points for making it this far! Take a break, refresh yourself... Done? Ok, good. Let's continue.
+
+### In which the sausage gets made
+The `initThreads` function does little more than spawn the configured number of threads and increment `live_thread_count` in the shared struct.
+````c
+void initThreads(void *params) {
+	
+	for (int i = 0; i != NTHREADS; i++) {
+		pthread_t new_thread;
+		pthread_create(&new_thread, NULL, (void *) &getPrime, params);
+		pthread_mutex_lock(&tcnt_lock);
+		((struct thread_params *) params)->live_thread_count++;
+		pthread_mutex_unlock(&tcnt_lock);
+		pthread_detach(new_thread);
+	}
+}
+````
+The function each thread executes is `getPrime`. It relies on the fantastic [GNU Multiple Precision Arithmetic Library](https://gmplib.org/) to handle calculations involving the very large numbers required for DH. 
+````c
+void getPrime(void *thread_params) {
+	
+	struct thread_params *params = (struct thread_params *) thread_params;
+	unsigned char seed_buff[SEED_SZ_BYTES];
+	
+	gmp_randstate_t state;
+	gmp_randinit_mt(state);
+	
+	mpz_t seed, randnum, one;
+	mpz_init(seed);
+	mpz_init(randnum);
+	mpz_init(one);
+	
+	unsigned char single = 1;
+	mpz_import(one, 1, -1, 1, 0, 0, &single);
+````
+As you see above, we initialize quite a few things to begin with: a buffer to hold a random seed, and several types provided by GMPlib
 
 (to be continued)
