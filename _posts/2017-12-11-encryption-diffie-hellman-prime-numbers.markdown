@@ -333,7 +333,7 @@ And if you then uncomment the two lines that are commented, you'll see:
 31397
 ...
 ````
-So, of all the prime unprivileged ports, the largest gap separating two primes is 72, and the prime just above that gap is the port the daemon `recv()`s on: 31397. Do I get my nerd badge now? :smile:
+So, of all the prime unprivileged ports, the largest gap separating two primes is 72, and the prime just below that gap is the port the daemon receives on: `31397`. Do I get my nerd badge now? :)
 
 Thanks for reading! I hope you learned something interesting, or at least enjoyed yourself. Talk to you soon!
 
