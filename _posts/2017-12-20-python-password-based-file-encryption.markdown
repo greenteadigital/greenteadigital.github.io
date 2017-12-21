@@ -1,0 +1,99 @@
+---
+layout: post
+title:  Password-based file encryption with Python 2
+date:   2017-12-20 17:13:00 -0500
+published: true
+---
+### Crypto train keeps rollin' on...
+Seeing as I'm already on the subject of crypto with my [last post](/2017/12/11/encryption-diffie-hellman-prime-numbers.html), I thought I would walk you through some [Python code](https://github.com/greenteadigital/pycrypto/blob/master/PBKDF2.py) I wrote to provide password-based file encryption and decryption capabilities. Of course, all the usual [disclaimers](https://github.com/greenteadigital/pycrypto/blob/master/README.md) apply.
+
+The idea here is simple: choose a file that you want to encrypt. Launch `PBKDF2.py` with the path to the file as the first arg, answer some questions, supply a password, and _Voilà_! You now have a secure version of said file you can attach to an email, or transmit through other insecure means. Of course, it will be only as secure as your chosen password, so make it [strong](https://support.google.com/accounts/answer/32040?hl=en)!
+
+### Ewww, did you step in some code?
+Enough pretext, let's step into the code :)
+````python
+import getpass
+from hashlib import sha512, sha384, sha256, sha224
+import os
+import struct
+import sys
+import zlib
+import bz2
+from cStringIO import StringIO as strio
+import userinput as usr
+
+ALGOS = {
+	0: sha224,
+	1: sha256,
+	2: sha384,
+	3: sha512
+}
+DIGESTSIZES = {
+	0: ALGOS[0]().digest_size,
+	1: ALGOS[1]().digest_size,
+	2: ALGOS[2]().digest_size,
+	3: ALGOS[3]().digest_size
+}
+COMPRESSION = {
+	0: None,
+	1: zlib,
+	2: bz2,
+}
+CRYPT_EXT = '.phse'
+MAGIC = "PBKDF2-HMAC-SHA2"
+PWD_HASH_MULT = 20
+sha2 = None	# set later
+````
+Other than [one module](https://github.com/greenteadigital/pycrypto/blob/master/userinput.py), all the imports come from Python's "batteries included" standard library. Some constants are initialized to support a choice of hashing and compression algorithms. An uninitialized `sha2` variable is also declared. Then we have some function `def`s...
+````python
+def _exit():
+	raw_input("\npress Enter to exit...")
+	sys.exit()
+````
+...`_exit`, which should be self-explanatory. Then two functions for packing and unpacking metadata into bitfields. These probably could benefit from further explanation:
+````python
+def bitPack(algonum, exp_incr, compressornum):
+	bitstr = (bin(algonum)[2:].zfill(2)
+			+ bin(exp_incr)[2:].zfill(2)
+			+ bin(compressornum)[2:].zfill(2)
+			+ '00')	## two bits left for storing metadata
+	
+	r = int('0b' + bitstr, 2)
+	return r
+
+def bitUnpack(_int):
+	bitstr = bin(_int)[2:].zfill(8)
+	algonum = int('0b' + bitstr[:2], 2)
+	increment_by = int('0b' + bitstr[2:4], 2)
+	compressornum = int('0b' + bitstr[4:6], 2)
+	
+	r = (algonum, increment_by, compressornum)
+	return r 
+````
+Then a function for doing constant time comparisons, the necessity of which I will touch on...
+````python
+def constTimeCompare(val1, val2):
+	if len(val1) != len(val2):
+		return False
+	result = 0
+	for x, y in zip(val1, val2):
+		result |= ord(x) ^ ord(y)
+
+	return not result
+````
+...followed by a core function which generates cryptograhic keying material:
+````python
+def genKeyBlock(password, salt):
+	blksz = sha2().block_size
+	passlen = len(password)
+	if passlen < blksz:
+		password += (chr(0) * (blksz - passlen))
+	else:
+		password = sha2(password).digest()
+	o_pad = ''.join(chr(0x5c ^ ord(char)) for char in password)
+	i_pad = ''.join(chr(0x36 ^ ord(char)) for char in password)
+
+	return sha2(o_pad + sha2(i_pad + salt).digest()).digest()
+````
+
+(to be continued)
