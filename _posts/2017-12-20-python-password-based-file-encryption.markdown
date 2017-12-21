@@ -37,7 +37,7 @@ DIGESTSIZES = {
 COMPRESSION = {
 	0: None,
 	1: zlib,
-	2: bz2,
+	2: bz2
 }
 CRYPT_EXT = '.phse'
 MAGIC = "PBKDF2-HMAC-SHA2"
