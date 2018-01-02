@@ -5,7 +5,7 @@ date:   2017-12-20 17:13:00 -0500
 published: true
 ---
 ### Crypto train keeps rollin' on...
-Seeing as I'm already on the subject of crypto with my [last post](/2017/12/11/encryption-diffie-hellman-prime-numbers.html), I thought I would walk you through some [Python code](https://github.com/greenteadigital/pycrypto/blob/master/PBKDF2.py) I wrote to provide password-based file encryption and decryption capabilities. Of course, all the usual [disclaimers](https://github.com/greenteadigital/pycrypto/blob/master/README.md) apply.
+Seeing as I'm already on the subject of crypto with my [last post](/2017/12/11/encryption-diffie-hellman-prime-numbers.html), I thought I would walk you through some Python [code](https://github.com/greenteadigital/pycrypto/blob/master/PBKDF2.py) I wrote to provide password-based file encryption and decryption capabilities. Of course, all the usual [disclaimers](https://github.com/greenteadigital/pycrypto/blob/master/README.md) apply.
 
 The idea here is simple: choose a file that you want to encrypt. Launch `PBKDF2.py` with the path to the file as the first arg, answer some questions, supply a password, and _Voilà_! You now have a secure version of said file you can attach to an email, or transmit through other insecure means. Of course, it will be only as secure as your chosen password, so make it [strong](https://support.google.com/accounts/answer/32040?hl=en)!
 
@@ -44,13 +44,13 @@ MAGIC = "PBKDF2-HMAC-SHA2"
 PWD_HASH_MULT = 20
 sha2 = None	# set later
 ````
-Other than [one module](https://github.com/greenteadigital/pycrypto/blob/master/userinput.py), all the imports come from Python's "batteries included" standard library. Some constants are initialized to support a choice of hashing and compression algorithms. An uninitialized `sha2` variable is also declared. Then we have some function `def`s...
+Other than one [module](https://github.com/greenteadigital/pycrypto/blob/master/userinput.py), all the imports come from Python's "batteries included" standard library. Some constants are initialized to support a choice of hashing and compression algorithms. An uninitialized `sha2` variable is also declared. Then we have some function `def`s...
 ````python
 def _exit():
 	raw_input("\npress Enter to exit...")
 	sys.exit()
 ````
-...`_exit`, which should be self-explanatory. Then two functions for packing and unpacking metadata into bitfields. These probably could benefit from further explanation:
+...`_exit`, which should be self-explanatory. Then two functions for packing and unpacking metadata into bitfields. `bitPack` is used to store user-selected preferences, like hashing algorithm and compression type, and `bitUnpack` extracts the stored preferences during the decryption phase.
 ````python
 def bitPack(algonum, exp_incr, compressornum):
 	bitstr = (bin(algonum)[2:].zfill(2)
@@ -70,7 +70,7 @@ def bitUnpack(_int):
 	r = (algonum, increment_by, compressornum)
 	return r 
 ````
-Then a function for doing constant time comparisons, the necessity of which I will touch on...
+Then a function for doing constant time comparisons. This is used to mitigate a type of [side-channel attack](https://en.wikipedia.org/wiki/Side-channel_attack) called a [timing attack](https://en.wikipedia.org/wiki/Timing_attack).
 ````python
 def constTimeCompare(val1, val2):
 	if len(val1) != len(val2):
@@ -95,5 +95,7 @@ def genKeyBlock(password, salt):
 
 	return sha2(o_pad + sha2(i_pad + salt).digest()).digest()
 ````
+
+
 
 (to be continued)
