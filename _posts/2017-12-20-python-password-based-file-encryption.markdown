@@ -7,7 +7,7 @@ published: true
 ### Crypto train keeps rollin' on...
 Seeing as I'm already on the subject of crypto with my [last post](/2017/12/11/encryption-diffie-hellman-prime-numbers.html), I'd like to swalk you through some [Python code](https://github.com/greenteadigital/pycrypto/blob/master/PBKDF2.py) I wrote to provide password-based file encryption and decryption capabilities. Of course, all the usual [disclaimers](https://github.com/greenteadigital/pycrypto/blob/master/README.md) apply.
 
-The idea here is simple: choose a file that you want to encrypt. Launch `PBKDF2.py` with the path to the file as the first arg (drag-drop), answer some questions, supply a password, and _Voilà_! You now have a secure version of said file you can attach to an email, or transmit through other insecure means. Of course, it will be only as secure as your chosen password, so make it [strong](https://support.google.com/accounts/answer/32040?hl=en)!
+The idea here is simple: choose a file that you want to encrypt. Launch `PBKDF2.py` with the path to the file as the first arg (drag-drop), answer some questions, supply a password, and _Voilà_! You now have a secure version of said file you can attach to an email, or transmit through other insecure means. Of course, it will be only as secure as your chosen password, so make it [strong](https://support.google.com/accounts/answer/32040?hl=en)! And of course, you did read the [disclaimer](https://github.com/greenteadigital/pycrypto/blob/master/README.md), _right_?
 
 ### Ewww, did you step in some code?
 Enough pretext, let's step into the code :)
@@ -50,7 +50,7 @@ def _exit():
 	raw_input("\npress Enter to exit...")
 	sys.exit()
 ````
-...`_exit`, which should be self-explanatory. Then two functions for packing and unpacking metadata into bitfields. The `bitPack` function is used to store user-selected preferences, like hashing algorithm and compression type, and `bitUnpack` which extracts the stored preferences during the decryption phase.
+...`_exit`, which should be self-explanatory. Then two functions for packing and unpacking metadata to and from bitfields. The `bitPack` function is used to store user-selected preferences, like hashing algorithm and compression type, and `bitUnpack` which extracts the stored preferences during the decryption phase.
 ````python
 def bitPack(algonum, exp_incr, compressornum):
 	bitstr = (bin(algonum)[2:].zfill(2)
@@ -70,7 +70,11 @@ def bitUnpack(_int):
 	r = (algonum, increment_by, compressornum)
 	return r 
 ````
-Following that is a function for doing constant-time comparisons. This is used to mitigate a type of [side-channel attack](https://en.wikipedia.org/wiki/Side-channel_attack) called a [timing attack](https://en.wikipedia.org/wiki/Timing_attack).
+Following that is a function for doing constant-time comparisons. This is used to mitigate a type of [side-channel attack](https://en.wikipedia.org/wiki/Side-channel_attack) called a [timing attack](https://en.wikipedia.org/wiki/Timing_attack). So, what is being compared? During the encryption phase the provided password is salted and hashed [many, many](https://github.com/greenteadigital/pycrypto/blob/42ca526462554898accddf0d4464984b1bcbdfb2/userinput.py#L30) times and stored in the encrypted file. It's during the decryption phase when a comparison is made of the salted hash of the provided password, and the hash stored in the encrypted `.phse` file. Putting on my critic's hat for a moment, I can see credible arguments being made that either:
+1. It's an unacceptable risk to include ANY form of the password in the encrypted file, or
+2. Constant-time comparison of hashes is not necessary because a small change in the input (`hunter1` -> `hunter2`) will produce dramtically different hashes, making the timing variance of a naive comparison of little use.
+
+While I tend to agree with the spirit of criticism #1, the addition of a random salt and a large, tunable iteration count make it less applicable. My reponse to criticism #2 is that yes, while it's true that the comparison of _secure hashes_ leaves no visible opening for a timing attack, the future evolution of the software may require comparisons not yet contemplated. So let's do the right thing right off the bat.
 ````python
 def constTimeCompare(val1, val2):
 	if len(val1) != len(val2):
@@ -81,7 +85,7 @@ def constTimeCompare(val1, val2):
 
 	return not result
 ````
-Following that is a core function which generates cryptograhic keying material.
+Following that comparison function is a core function which generates cryptograhic keying material.
 ````python
 def genKeyBlock(password, salt):
 	blksz = sha2().block_size
