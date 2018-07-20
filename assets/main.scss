@@ -20,6 +20,7 @@ th {
 .wiki-logo {
     width: 70px;
     opacity: .51;
+    transition: opacity 0.35s;    
 }
 .wiki-logo:hover {
     opacity: 1;

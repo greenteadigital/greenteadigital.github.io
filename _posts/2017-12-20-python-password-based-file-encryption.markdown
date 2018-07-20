@@ -72,7 +72,7 @@ def bitUnpack(_int):
 ````
 Following that is a function for doing constant-time comparisons. This is used to mitigate a type of [side-channel attack](https://en.wikipedia.org/wiki/Side-channel_attack) called a [timing attack](https://en.wikipedia.org/wiki/Timing_attack). So, what is being compared? During the encryption phase the provided password is salted and hashed [many, many](https://github.com/greenteadigital/pycrypto/blob/42ca526462554898accddf0d4464984b1bcbdfb2/userinput.py#L30) times and stored in the encrypted file. It's during the decryption phase when a comparison is made of the salted hash of the provided password, and the hash stored in the encrypted `.phse` file. Putting on my critic's hat for a moment, I can see credible arguments being made that either:
 1. It's an unacceptable risk to include ANY form of the password in the encrypted file, or
-2. Constant-time comparison of hashes is not necessary because a small change in the input (`hunter1` -> `hunter2`) will produce dramtically different hashes, making the timing variance of a naive comparison of little use.
+2. Constant-time comparison of hashes is not necessary because a small change in the input (`hunter1` -> `hunter2`) will produce dramatically different hashes, making the timing variance of a naive comparison of little use.
 
 While I tend to agree with the spirit of criticism #1, the addition of a random salt and a large, tunable iteration count make it less applicable. My reponse to criticism #2 is that yes, while it's true that the comparison of _secure hashes_ leaves no visible opening for a timing attack, the future evolution of the software may require comparisons not yet contemplated. So let's do the right thing right off the bat.
 ````python
